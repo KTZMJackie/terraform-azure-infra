@@ -15,6 +15,8 @@ resource "azurerm_linux_web_app" "this" {
   https_only                    = true
   virtual_network_subnet_id     = var.app_subnet_id
   public_network_access_enabled = false
+  client_certificate_enabled    = true
+  client_certificate_mode       = "Optional"
   tags                          = var.tags
 
   identity {
@@ -25,9 +27,23 @@ resource "azurerm_linux_web_app" "this" {
     minimum_tls_version = "1.2"
     ftps_state          = "Disabled"
     always_on           = var.always_on
+    http2_enabled       = true
+    health_check_path   = "/"
 
     application_stack {
       node_version = "20-lts"
+    }
+  }
+
+  logs {
+    detailed_error_messages = true
+    failed_request_tracing  = true
+
+    http_logs {
+      file_system {
+        retention_in_days = 7
+        retention_in_mb   = 35
+      }
     }
   }
 
@@ -38,14 +54,12 @@ resource "azurerm_linux_web_app" "this" {
   }
 }
 
-# Let the app's identity READ secrets from Key Vault — no passwords in config.
 resource "azurerm_role_assignment" "app_kv_secrets_user" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_linux_web_app.this.identity[0].principal_id
 }
 
-# Private endpoint so the app is only reachable from inside the VNet.
 resource "azurerm_private_dns_zone" "app" {
   name                = "privatelink.azurewebsites.net"
   resource_group_name = var.resource_group_name

@@ -33,10 +33,11 @@ resource "azurerm_mssql_database" "this" {
 
 # Store the generated password in Key Vault instead of exposing it.
 resource "azurerm_key_vault_secret" "sql_admin_password" {
-  name         = "sql-admin-password"
-  value        = random_password.sql_admin.result
-  key_vault_id = var.key_vault_id
-  content_type = "password"
+  name            = "sql-admin-password"
+  value           = random_password.sql_admin.result
+  key_vault_id    = var.key_vault_id
+  content_type    = "password"
+  expiration_date = "2027-12-31T23:59:59Z"
 }
 
 # Private-endpoint pattern again — subresource "sqlServer", its own DNS zone.

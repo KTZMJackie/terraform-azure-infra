@@ -6,7 +6,6 @@ resource "azurerm_virtual_network" "this" {
   tags                = var.tags
 }
 
-# Subnet for App Service VNet integration (needs a "delegation").
 resource "azurerm_subnet" "app" {
   name                 = "snet-app"
   resource_group_name  = var.resource_group_name
@@ -22,7 +21,6 @@ resource "azurerm_subnet" "app" {
   }
 }
 
-# Subnet that holds the private endpoints for Key Vault, SQL, Storage.
 resource "azurerm_subnet" "private_endpoints" {
   name                              = "snet-private-endpoints"
   resource_group_name               = var.resource_group_name
@@ -31,7 +29,6 @@ resource "azurerm_subnet" "private_endpoints" {
   private_endpoint_network_policies = "Enabled"
 }
 
-# A firewall (NSG) attached to the app subnet.
 resource "azurerm_network_security_group" "app" {
   name                = "${var.name_prefix}-app-nsg"
   location            = var.location
@@ -42,4 +39,16 @@ resource "azurerm_network_security_group" "app" {
 resource "azurerm_subnet_network_security_group_association" "app" {
   subnet_id                 = azurerm_subnet.app.id
   network_security_group_id = azurerm_network_security_group.app.id
+}
+
+resource "azurerm_network_security_group" "pe" {
+  name                = "${var.name_prefix}-pe-nsg"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "pe" {
+  subnet_id                 = azurerm_subnet.private_endpoints.id
+  network_security_group_id = azurerm_network_security_group.pe.id
 }

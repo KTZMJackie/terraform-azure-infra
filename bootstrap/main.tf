@@ -31,6 +31,8 @@ resource "azurerm_resource_group" "tfstate" {
 }
 
 resource "azurerm_storage_account" "tfstate" {
+  #checkov:skip=CKV_AZURE_59:State backend must be reachable from CI/CD runners over the public internet
+  #checkov:skip=CKV2_AZURE_33:State backend uses network rules + AAD auth; a private endpoint would block public runners
   name                            = "st${var.project}tfstate${random_string.suffix.result}"
   resource_group_name             = azurerm_resource_group.tfstate.name
   location                        = azurerm_resource_group.tfstate.location
@@ -41,6 +43,9 @@ resource "azurerm_storage_account" "tfstate" {
   allow_nested_items_to_be_public = false
   blob_properties {
     versioning_enabled = true
+    delete_retention_policy {
+      days = 7
+    }
   }
   tags = var.tags
 }

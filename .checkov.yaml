@@ -1,4 +1,25 @@
+# Checkov baseline. We FIX cheap, meaningful findings in code and RISK-ACCEPT
+# the rest below, each with a reason. This is the professional pattern —
+# documented exceptions, never a blanket disable.
 framework:
   - terraform
 skip-check:
-  - CKV2_AZURE_33
+  # Cost / high-availability (dev intentionally uses the cheapest SKUs)
+  - CKV_AZURE_211  # App Service production SKU (dev runs B1 by design)
+  - CKV_AZURE_212  # App Service min instances for failover (single instance in dev)
+  - CKV_AZURE_225  # App Service Plan zone redundancy (needs premium multi-zone)
+  - CKV_AZURE_229  # SQL DB zone redundancy (Basic/S0 tier)
+  - CKV_AZURE_206  # Storage GRS replication (LRS is intentional for demo cost)
+  # Features not used by this workload
+  - CKV_AZURE_88   # App Service uses Azure Files (not applicable)
+  - CKV_AZURE_33   # Storage queue logging (queues not used)
+  - CKV_AZURE_224  # SQL ledger (specialized tamper-evidence)
+  - CKV2_AZURE_41  # Storage SAS expiration policy (no SAS issued)
+  - CKV2_AZURE_40  # Shared key on tfstate account (state backend requires it)
+  # Requires additional infra beyond demo scope
+  - CKV_AZURE_13   # App Service Authentication (app-level identity provider)
+  - CKV_AZURE_23   # SQL auditing (needs a dedicated audit storage account)
+  - CKV_AZURE_24   # SQL auditing retention >90d (tied to auditing)
+  - CKV2_AZURE_2   # SQL vulnerability assessment (needs storage + policies)
+  - CKV2_AZURE_1   # Storage customer-managed keys (platform-managed keys used)
+  - CKV2_AZURE_21  # Blob read logging via diagnostic settings (log cost)
