@@ -48,9 +48,25 @@ jobs:
           framework: terraform
           soft_fail: false
 
+  check-azure:
+    name: check azure connection
+    runs-on: ubuntu-latest
+    outputs:
+      connected: ${{ steps.check.outputs.connected }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+            echo "connected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "connected=false" >> "$GITHUB_OUTPUT"
+            echo "Azure secrets not set — skipping plan/apply (validation still runs)."
+          fi
+
   plan:
     name: plan (dev)
-    needs: validate
+    needs: [validate, check-azure]
+    if: needs.check-azure.outputs.connected == 'true'
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -73,8 +89,8 @@ jobs:
 
   apply:
     name: apply (dev)
-    needs: plan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [plan, check-azure]
+    if: needs.check-azure.outputs.connected == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: dev
     steps:
