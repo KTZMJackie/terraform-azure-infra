@@ -1,0 +1,24 @@
+# Local .terraform directories (huge provider binaries — never commit)
+**/.terraform/*
+
+# State files — contain secrets in plain text
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Backend + variable files that must never be public
+backend.hcl
+*.tfvars.local
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Credentials
+.terraformrc
+terraform.rc
+.env
+
+.DS_Store
