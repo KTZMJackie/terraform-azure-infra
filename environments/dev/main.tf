@@ -69,7 +69,6 @@ module "storage" {
 
 module "sql" {
   source                     = "../../modules/sql-database"
-  depends_on                 = [module.key_vault]
   server_name                = "sql-${var.project}-${var.environment}-${local.suffix}"
   database_name              = "appdb"
   location                   = var.location
@@ -77,7 +76,6 @@ module "sql" {
   azuread_admin_login        = data.azurerm_client_config.current.object_id
   azuread_admin_object_id    = data.azurerm_client_config.current.object_id
   sku_name                   = var.sql_sku_name
-  key_vault_id               = module.key_vault.id
   vnet_id                    = module.network.vnet_id
   private_endpoint_subnet_id = module.network.private_endpoint_subnet_id
   tags                       = local.base_tags

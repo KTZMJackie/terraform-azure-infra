@@ -13,7 +13,7 @@ variable "resource_group_name" {
 variable "retention_in_days" {
   description = "How long to keep logs."
   type        = number
-  default     = 30
+  default     = 90
 }
 
 variable "tags" {
