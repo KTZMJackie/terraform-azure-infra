@@ -24,11 +24,12 @@ resource "azurerm_linux_web_app" "this" {
   }
 
   site_config {
-    minimum_tls_version = "1.2"
-    ftps_state          = "Disabled"
-    always_on           = var.always_on
-    http2_enabled       = true
-    health_check_path   = "/"
+    minimum_tls_version               = "1.2"
+    ftps_state                        = "Disabled"
+    always_on                         = var.always_on
+    http2_enabled                     = true
+    health_check_path                 = "/"
+    health_check_eviction_time_in_min = 2
 
     application_stack {
       node_version = "20-lts"

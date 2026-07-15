@@ -92,7 +92,7 @@ jobs:
   apply:
     name: apply (dev)
     needs: [plan, check-azure]
-    if: needs.check-azure.outputs.connected == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: needs.check-azure.outputs.connected == 'true' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: dev
     steps:

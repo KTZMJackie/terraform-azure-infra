@@ -49,6 +49,7 @@ module "key_vault" {
   resource_group_name        = module.resource_group.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   deployer_object_id         = data.azurerm_client_config.current.object_id
+  allowed_ip_addresses       = var.key_vault_allowed_ips
   vnet_id                    = module.network.vnet_id
   private_endpoint_subnet_id = module.network.private_endpoint_subnet_id
   tags                       = local.base_tags
@@ -56,6 +57,8 @@ module "key_vault" {
 
 module "storage" {
   source                     = "../../modules/storage-account"
+  allowed_ip_addresses       = var.key_vault_allowed_ips
+  allow_shared_key           = var.storage_allow_shared_key
   name                       = "st${var.project}${var.environment}${local.suffix}"
   location                   = var.location
   resource_group_name        = module.resource_group.name
@@ -66,6 +69,7 @@ module "storage" {
 
 module "sql" {
   source                     = "../../modules/sql-database"
+  depends_on                 = [module.key_vault]
   server_name                = "sql-${var.project}-${var.environment}-${local.suffix}"
   database_name              = "appdb"
   location                   = var.location

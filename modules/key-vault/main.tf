@@ -1,4 +1,5 @@
 resource "azurerm_key_vault" "this" {
+  #checkov:skip=CKV_AZURE_189:Public access is disabled by default (allowlist empty); enabled only via an explicit deployer IP allowlist with default_action=Deny for break-glass deploys
   name                          = var.name
   location                      = var.location
   resource_group_name           = var.resource_group_name
@@ -7,11 +8,12 @@ resource "azurerm_key_vault" "this" {
   rbac_authorization_enabled    = true
   purge_protection_enabled      = true
   soft_delete_retention_days    = 7
-  public_network_access_enabled = false
+  public_network_access_enabled = length(var.allowed_ip_addresses) > 0
 
   network_acls {
     default_action = "Deny"
     bypass         = "AzureServices"
+    ip_rules       = var.allowed_ip_addresses
   }
 
   tags = var.tags

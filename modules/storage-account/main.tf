@@ -7,9 +7,15 @@ resource "azurerm_storage_account" "this" {
   min_tls_version                 = "TLS1_2"
   https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
-  shared_access_key_enabled       = false
-  public_network_access_enabled   = false
+  shared_access_key_enabled       = var.allow_shared_key
+  public_network_access_enabled   = length(var.allowed_ip_addresses) > 0
   tags                            = var.tags
+
+  network_rules {
+    default_action = "Deny"
+    bypass         = ["AzureServices"]
+    ip_rules       = var.allowed_ip_addresses
+  }
 
   blob_properties {
     versioning_enabled = true

@@ -29,3 +29,14 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+variable "allowed_ip_addresses" {
+  description = "Public IPs allowed through the storage firewall during apply. Empty = fully private."
+  type        = list(string)
+  default     = []
+}
+
+variable "allow_shared_key" {
+  description = "Allow shared-key auth (needed for laptop-based apply of blob properties). Default false = hardened."
+  type        = bool
+  default     = false
+}

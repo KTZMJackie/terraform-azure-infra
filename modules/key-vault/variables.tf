@@ -32,3 +32,8 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+variable "allowed_ip_addresses" {
+  description = "Public IPs allowed through the Key Vault firewall (e.g. the deployer's IP). Empty = fully private."
+  type        = list(string)
+  default     = []
+}
