@@ -78,6 +78,15 @@ terraform destroy
 
 Dev uses the cheapest viable SKUs (SQL Basic, App Service B1). Run `terraform destroy` when not actively demoing.
 
+## Security & hardening
+
+- **Entra-ID-only SQL** — `azuread_authentication_only`; no SQL password exists anywhere, including in state.
+- **No public data plane** — Key Vault, SQL, storage, and the web app have public access disabled and are reached only via private endpoints.
+- **Managed identity + RBAC** — the app reads Key Vault with a system-assigned identity (`Key Vault Secrets User`); no secrets in app settings.
+- **AAD-auth-only remote state** — the state storage has shared keys disabled and infrastructure encryption on; Terraform authenticates with an Azure AD identity.
+- **Least-privilege CI** — GitHub authenticates via OIDC (no stored secrets); the identity holds `Role Based Access Control Administrator`, not the broader `User Access Administrator`.
+- **Policy-as-code** — Checkov runs as a build gate; the few exceptions are documented, cost-based risk-acceptances in `.checkov.yaml`.
+
 ## Concepts demonstrated
 
 Reusable modules with clean input and output contracts, environment separation, remote state with locking, private endpoints and private DNS, managed identities and RBAC, secret management in Key Vault, secretless OIDC CI/CD, and policy-as-code security scanning with documented exceptions.
