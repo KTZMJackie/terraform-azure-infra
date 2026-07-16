@@ -1,97 +1,100 @@
-# Terraform Azure Infrastructure
+# terraform-azure-infra
 
-![terraform](https://github.com/KTZMJackie/terraform-azure-infra/actions/workflows/terraform.yml/badge.svg)
+Modular, security-hardened Azure platform provisioned with Terraform. Private networking throughout, remote state with locking, and an OIDC-authenticated CI/CD pipeline with format, validation, lint, and security scanning gates.
 
-Infrastructure-as-Code for a **secure, private web-application platform on Azure**, built with Terraform. Reusable modules, per-environment deployments, remote state, and a CI/CD pipeline that validates and security-scans every change before it reaches Azure.
-
-The design goal is a network-isolated stack with **no public data-plane exposure**: the web app, database, secrets, and storage are reachable only from inside the virtual network via private endpoints. This mirrors infrastructure used in regulated industries such as healthcare, finance, and government, where sensitive data cannot traverse the public internet.
+> Everything below is provisioned as reusable modules composed in `environments/dev`. No secrets are stored in the repo or the pipeline — CI authenticates to Azure via OIDC federated credentials.
 
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph VNet["Virtual Network"]
-        APP["Linux Web App"]
-        subgraph PE["Private Endpoint subnet"]
-            P1["Key Vault endpoint"]
-            P2["SQL endpoint"]
-            P3["Storage endpoint"]
-        end
+graph TD
+    subgraph CICD[GitHub Actions - OIDC, no stored secrets]
+        PR[Pull Request] --> VAL[fmt / validate / TFLint / Checkov]
+        VAL --> PLAN[terraform plan]
+        MERGE[workflow_dispatch] --> APPLY[terraform apply - dev environment gate]
     end
-    KV["Key Vault"]
-    SQL["Azure SQL"]
-    ST["Storage Account"]
-    MON["Log Analytics and App Insights"]
 
-    APP -->|VNet integration| PE
-    APP -->|managed identity| KV
-    APP -->|telemetry| MON
-    P1 --- KV
-    P2 --- SQL
-    P3 --- ST
-    SQL -->|admin password| KV
+    subgraph AZ[Azure - environments/dev]
+        RG[Resource Group]
+        VNET[VNet: app subnet + private-endpoint subnet]
+        KV[Key Vault + Private Endpoint]
+        ST[Storage Account: deny-default, TLS1.2, PE, versioning]
+        SQL[Azure SQL: Entra-ID admin + Private Endpoint]
+        APP[App Service: VNet integration + KV references]
+        MON[Monitoring: App Insights / Log Analytics]
+    end
+
+    APPLY --> RG
+    RG --> VNET --> KV
+    VNET --> ST
+    VNET --> SQL
+    VNET --> APP
+    APP --> KV
+    APP --> MON
 ```
 
-Every private endpoint has its own private DNS zone and VNet link, so in-network name resolution points at private IPs.
+## Modules
 
-## What it deploys
+| Module | Provisions | Security posture |
+|---|---|---|
+| `resource-group` | Resource group + tagging | Consistent tags, `managedby = terraform` |
+| `network` | VNet, app subnet, private-endpoint subnet | Segmented subnets for app vs private endpoints |
+| `monitoring` | Application Insights / Log Analytics | Central telemetry for App Service |
+| `key-vault` | Key Vault + Private Endpoint | Private DNS, deployer-scoped access, IP allowlist |
+| `storage-account` | Storage account + Private Endpoint | `default_action = Deny`, TLS 1.2, no public blobs, blob versioning + 7-day retention, private DNS zone |
+| `sql-database` | Azure SQL server + database | Entra-ID (AAD) admin, Private Endpoint, no SQL-auth admin |
+| `app-service` | Linux App Service | VNet integration, Key Vault references (no secrets in app settings), App Insights wired in |
 
-- **Resource Group** and **Virtual Network** with a delegated subnet for App Service integration and an NSG-protected subnet for private endpoints.
-- **Linux Web App** with system-assigned managed identity, HTTPS-only, TLS 1.2, HTTP/2, health checks, HTTP logging, regional VNet integration, public access disabled and fronted by a private endpoint.
-- **Azure SQL** with public network access disabled, Azure AD administrator, TLS 1.2, and a private endpoint. The generated admin password is written directly to Key Vault, never exposed as an output.
-- **Key Vault** that is RBAC-authorized, purge-protected, public access denied, reached over a private endpoint. The web app identity is granted Key Vault Secrets User.
-- **Storage Account** with shared-key access disabled, public access off, TLS 1.2, blob versioning and soft delete, and a private endpoint.
-- **Monitoring** via a Log Analytics workspace and workspace-based Application Insights.
+Composition, naming, and tagging live in `environments/dev/main.tf`; a random suffix keeps globally-unique names (Storage, Key Vault, SQL) collision-free.
 
-## Repository structure
+## Security highlights (what an interviewer will look for)
 
-```text
-modules/        resource-group, network, monitoring, key-vault,
-                sql-database, app-service, storage-account
-environments/   dev  (Basic / B1)   and   prod  (S0 / P1v3)
-                same modules, sizing differs only in terraform.tfvars
-bootstrap/      one-time creation of the remote-state storage account
-.github/        CI pipeline: fmt, validate, tflint, checkov, plan, apply
-```
+- **Private networking by default** — Key Vault, Storage, and SQL are reached over Private Endpoints with private DNS zones; public network access is denied or IP-allowlisted.
+- **No secrets in code or pipeline** — App Service uses Key Vault references; CI uses OIDC federated identity (`ARM_USE_OIDC = true`), so there are no client secrets in GitHub.
+- **Identity-based data plane** — SQL uses an Entra-ID administrator rather than SQL auth.
+- **Hardened storage** — deny-by-default network rules, TLS 1.2 minimum, public blobs disabled, versioning + soft-delete retention.
+- **State safety** — remote state in Azure Blob with automatic lease-based locking to prevent concurrent applies.
 
-## CI/CD
+## CI/CD pipeline (`.github/workflows/terraform.yml`)
 
-Every pull request and push runs `terraform fmt`, `validate`, TFLint, and Checkov, a security scan that fails the build on findings with documented risk-accepted exceptions in `.checkov.yaml`. The plan job runs against dev and apply runs on merge to main, both authenticating to Azure via OIDC federation with no stored secrets. The deploy jobs skip automatically until Azure credentials are configured.
+Authenticates to Azure with **OIDC** (`permissions: id-token: write`) — no stored credentials.
+
+| Stage | Runs on | What it does |
+|---|---|---|
+| `validate` | every PR + push | `terraform fmt -check`, `init -backend=false`, `validate`, **TFLint**, **Checkov** security scan (`soft_fail: false`) |
+| `check-azure` | every run | Skips plan/apply gracefully if Azure secrets aren't configured (validation still runs) |
+| `plan` | PR / push to main | OIDC login → `init` with `backend.hcl` → `terraform plan` |
+| `apply` | `workflow_dispatch` only | OIDC login → `terraform apply` behind the `dev` environment gate |
+
+Plans run automatically on PRs; applies are manual and environment-gated — so no commit can silently mutate infrastructure.
+
+## Remote state
+
+State is stored in Azure Blob Storage with automatic locking.
+
+| Setting | Value |
+|---|---|
+| Backend | `azurerm` |
+| Container | `tfstate` |
+| Locking | Automatic (Azure Blob lease) |
+| Backend config | `environments/dev/backend.hcl` |
 
 ## Usage
 
 ```bash
-# 1. one-time: create the remote-state backend
-cd bootstrap
-terraform init && terraform apply
-
-# 2. deploy an environment
-cd ../environments/dev
-cp backend.hcl.example backend.hcl
+cd environments/dev
+cp terraform.tfvars.example terraform.tfvars   # set project, location, address spaces, allowed IPs
 terraform init -backend-config=backend.hcl
 terraform plan
 terraform apply
-
-# tear down when finished
-terraform destroy
 ```
 
-Dev uses the cheapest viable SKUs (SQL Basic, App Service B1). Run `terraform destroy` when not actively demoing.
+Requirements: Terraform >= 1.9, Azure CLI (`az login`), an Azure subscription. For CI, configure an App Registration with a federated credential and set `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` as repo secrets.
 
-## Security & hardening
+## Tech
 
-- **Entra-ID-only SQL** — `azuread_authentication_only`; no SQL password exists anywhere, including in state.
-- **No public data plane** — Key Vault, SQL, storage, and the web app have public access disabled and are reached only via private endpoints.
-- **Managed identity + RBAC** — the app reads Key Vault with a system-assigned identity (`Key Vault Secrets User`); no secrets in app settings.
-- **AAD-auth-only remote state** — the state storage has shared keys disabled and infrastructure encryption on; Terraform authenticates with an Azure AD identity.
-- **Least-privilege CI** — GitHub authenticates via OIDC (no stored secrets); the identity holds `Role Based Access Control Administrator`, not the broader `User Access Administrator`.
-- **Policy-as-code** — Checkov runs as a build gate; the few exceptions are documented, cost-based risk-acceptances in `.checkov.yaml`.
-
-## Concepts demonstrated
-
-Reusable modules with clean input and output contracts, environment separation, remote state with locking, private endpoints and private DNS, managed identities and RBAC, secret management in Key Vault, secretless OIDC CI/CD, and policy-as-code security scanning with documented exceptions.
+Terraform 1.9 · azurerm ~> 4.x · GitHub Actions (OIDC) · TFLint · Checkov · Azure: VNet, Private Endpoints, Private DNS, Key Vault, Storage, Azure SQL, App Service, App Insights.
 
 ## Certifications
 
-- Microsoft Azure Administrator Associate (AZ-104)
-- Microsoft Azure Fundamentals (AZ-900)
+Microsoft Azure Administrator Associate (AZ-104) · Azure Fundamentals (AZ-900)
